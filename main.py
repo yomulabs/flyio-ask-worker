@@ -4,6 +4,9 @@ import os
 from sentence_transformers import SentenceTransformer
 import openai
 from langchain.text_splitter import MarkdownTextSplitter
+from timeit import default_timer as timer
+import requests
+from bs4 import BeautifulSoup
 
 
 load_dotenv()
@@ -25,19 +28,31 @@ def add_markdown_document(filename):
     markdown_splitter = MarkdownTextSplitter(chunk_size=MODEL_CHUNK_SIZE, chunk_overlap=0)
     docs = markdown_splitter.create_documents([document])
     for doc in docs:
-        insert_vector(doc.page_content)
+        insert_vector(doc.page_content, filename)
 
-def insert_vector(text):
-    print("inserting vector: " + len(text) + " characters")
+def rebuild_vector_for_path(path):
+    print("eh")
+
+def insert_vector(text, path):
+    start = timer()
     embedding = model.encode(text)
+    end = timer()
+    print(f'encode took {end - start} seconds')
 
     last_id  = index.describe_index_stats()['total_vector_count']
 
     upserted_data = []
-    vector = ("asdf", embedding.tolist(), { 'content': text })
+    vector = (str(last_id + 1), embedding.tolist(), { 'content': text, 'path': path })
     upserted_data.append(vector)
 
     index.upsert(vectors=upserted_data)
+    end = timer()
+
+    print(f'insert_vector {len(text)} took {end - start} seconds')
+
+def list_vectors():
+    results = index.fetch(ids=[])
+    print(results)
 
 def query_vector(user_query):
     query_em = model.encode(user_query).tolist()
@@ -45,17 +60,12 @@ def query_vector(user_query):
     return result
 
 def ask_chatgpt(knowledge_base, user_query):
-    system_content = """You are CodeCompanion, an AI coding assistant designed to help users with their programming needs. You follow the CodeCompanion Ruleset to ensure a helpful and polite interaction. Please provide assistance in accordance with the following rules:
-    1. Respond in first person as "CodeCompanion" in a polite and friendly manner, always anticipating the keyword "continue".
-    2. Always respond with "CodeCompanion" before any response or code block to maintain proper formatting.
-    3. Identify the user's requested programming language and adhere to its best practices.
-    4. Always respond as "CodeCompanion" and apologize if necessary when using "continue".
-    5. Generate learning guides based on the user's skill level, asking for their experience beforehand.
-    6. Create code when requested by the user.
-    7. Provide explanations for the code snippets and suggest alternative approaches when applicable.
-    8. Offer debugging support by identifying potential issues in the user's code and suggesting solutions.
-    9. Recommend relevant resources or tutorials for further learning and improvement.
-    10.Be mindful of the user's time, prioritizing concise and accurate responses."
+    system_content = """You are an AI coding assistant designed to help users with their programming needs. You follow the CodeCompanion Ruleset to ensure a helpful and polite interaction. Please provide assistance in accordance with the following rules:
+    1. Create code when requested by the user.
+    2. Provide explanations for the code snippets and suggest alternative approaches when applicable.
+    3. Offer debugging support by identifying potential issues in the user's code and suggesting solutions.
+    4. Recommend relevant resources or tutorials for further learning and improvement.
+    5. If you dont know the answer, say that you dont know the answer.
     """
 
     user_content = f"""
@@ -82,4 +92,40 @@ def run():
 # f = open("pinecone-cli.txt", "r")
 # document = f.read()
 
-add_markdown_document("pinecone-cli.txt")
+#add_markdown_document("pinecone-cli.txt")
+
+def get_html_body_content(url):
+    response = requests.get(url)
+
+    # Parse the HTML content
+    soup = BeautifulSoup(response.content, "html.parser")
+
+    # Find the body element and extract its inner text
+    body = soup.body
+    inner_text = body.get_text(strip=True)
+    return inner_text
+
+def get_html_sitemap(url):
+    response = requests.get(url)
+
+    # Parse the HTML content
+    soup = BeautifulSoup(response.content, "lxml")
+
+    # Find the body element and extract its inner text
+    links = []
+
+    locations = soup.find_all("loc")
+    for location in locations:
+        url = location.get_text()
+        if "fly.io/docs" in url:
+            links.append(url)
+
+    return links
+
+
+links = get_html_sitemap("https://fly.io/sitemap.xml")
+count = 3
+for link in links[:count]:
+    content = get_html_body_content(link)
+    insert_vector(content, link)
+
