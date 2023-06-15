@@ -1,4 +1,7 @@
+
 from dotenv import load_dotenv
+from typing import Optional
+
 import pinecone
 import os
 from sentence_transformers import SentenceTransformer
@@ -8,6 +11,19 @@ from timeit import default_timer as timer
 import requests
 from bs4 import BeautifulSoup
 import math
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI()
+
+class Msg(BaseModel):
+    msg: str
+
+
+@app.get("/")
+async def root():
+    return {"message": "Hello World. Welcome to FastAPI!"}
 
 from pymilvus import (
     MilvusClient,
@@ -202,8 +218,6 @@ def print_vector_count_milvus():
     print(len(result))
 
 #index_website()
-
-
 #run('how do i add turbo streams')
+#print_vector_count_milvus()
 
-print_vector_count_milvus()

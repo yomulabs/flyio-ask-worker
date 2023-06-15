@@ -1,7 +1,9 @@
-python-dotenv-1.0.0
+python-dotenv==1.0.0
 openai==0.27.8
 langchain==0.0.198
 pinecone-client==2.2.2
 sentence-transformers==2.2.2
-beautifulsoup4=4.12.2
-PyMilvus=2.2.11
+beautifulsoup4==4.12.2
+PyMilvus==2.2.11
+sanic==23.3.0
+fastapi==0.97.0
