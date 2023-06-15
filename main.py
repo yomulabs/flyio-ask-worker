@@ -23,7 +23,7 @@ from pymilvus import (
 load_dotenv()
 
 milvus_client = MilvusClient(
-    uri=os.getenv("MILVUS_ENDPOINT"), 
+    uri=os.getenv("MILVUS_ENDPOINT"),
     token=os.getenv("MILVUS_API_KEY")
 )
 
@@ -71,7 +71,11 @@ def insert_embedding_to_milvus(embedding, text, path):
         'path': path
     }
 
+    start = timer()
     milvus_client.insert("flyio_ada", data=[row])
+    end = timer()
+
+    print(f'insert_vector {len(text)} took {end - start} seconds')
 
 def insert_embedding(embedding, text, path):
     insert_embedding_to_milvus(embedding, text, path)
@@ -97,8 +101,8 @@ def query_milvus(embedding):
     result_count = 1
 
     result = milvus_client.search(
-        collection_name=milvus_collection_name, 
-        data=[embedding], 
+        collection_name=milvus_collection_name,
+        data=[embedding],
         limit=result_count,
         output_fields=["path", "text"])
 
@@ -174,7 +178,7 @@ def get_html_sitemap(url):
     locations = soup.find_all("loc")
     for location in locations:
         url = location.get_text()
-        if "fly.io/docs" in url:
+        if "fly.io/docs" not in url:
             links.append(url)
 
     return links
@@ -182,11 +186,24 @@ def get_html_sitemap(url):
 
 def index_website():
     links = get_html_sitemap("https://fly.io/sitemap.xml")
-    for link in links[:5]:
-        content = get_html_body_content(link)
-        add_html_to_vectordb(content, link)
+    for link in links[7:]:
+        print(link)
+        try:
+            content = get_html_body_content(link)
+            add_html_to_vectordb(content, link)
+        except:
+            print("unable to process: " + link)
+
+def print_vector_count_milvus():
+    stats = milvus_client.describe_collection(collection_name=milvus_collection_name)
+    print(stats)
+
+    result = milvus_client.query(collection_name=milvus_collection_name, filter='id > 3', output_fields=["id", "path"], limit=200)
+    print(len(result))
 
 #index_website()
 
 
-run('how do i add turbo streams')
+#run('how do i add turbo streams')
+
+print_vector_count_milvus()
