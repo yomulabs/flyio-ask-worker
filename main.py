@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 import math
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 
@@ -113,8 +114,8 @@ def query_milvus(embedding):
         limit=result_count,
         output_fields=["path", "text"])
 
-    list_of_knowledge_base = map(lambda match: match['entity']['text'], result[0])
-    list_of_sources = map(lambda match: match['entity']['path'], result[0])
+    list_of_knowledge_base = list(map(lambda match: match['entity']['text'], result[0]))
+    list_of_sources = list(map(lambda match: match['entity']['path'], result[0]))
 
     return {
         'list_of_knowledge_base': list_of_knowledge_base,
@@ -146,7 +147,7 @@ def ask_chatgpt(knowledge_base, user_query):
     user_message = {"role": "user", "content": user_content}
     
     chatgpt_response = openai.ChatCompletion.create(model="gpt-3.5-turbo-0613", messages=[system_message, user_message])
-    return chatgpt_response
+    return chatgpt_response.choices[0].message.content
 
 def ask(query):
     user_query = query
@@ -219,6 +220,14 @@ def print_vector_count_milvus():
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Include OPTIONS method
+    allow_headers=["*"],
+)
+
+
 class Msg(BaseModel):
     msg: str
 
@@ -226,10 +235,10 @@ class Msg(BaseModel):
 @app.get("/")
 async def root():
     return {"message": "Hello World. Welcome to FastAPI!"}
-    result = ask("how do i add turbo streams")
-    return result
 
 @app.post("/search")
 async def search(inp: Msg):
-    response = ask(inp.msg)
-    return response
+    result = ask(inp.msg)
+    print("search result")
+    print(result)
+    return result

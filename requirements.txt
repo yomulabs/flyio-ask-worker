@@ -7,3 +7,4 @@ beautifulsoup4==4.12.2
 PyMilvus==2.2.11
 sanic==23.3.0
 fastapi==0.97.0
+uvicorn==0.20.0
