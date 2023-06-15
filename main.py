@@ -15,15 +15,6 @@ import math
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-app = FastAPI()
-
-class Msg(BaseModel):
-    msg: str
-
-
-@app.get("/")
-async def root():
-    return {"message": "Hello World. Welcome to FastAPI!"}
 
 from pymilvus import (
     MilvusClient,
@@ -153,12 +144,11 @@ def ask_chatgpt(knowledge_base, user_query):
     """
     system_message = {"role": "system", "content": system_content}
     user_message = {"role": "user", "content": user_content}
-    print(user_content)
+    
     chatgpt_response = openai.ChatCompletion.create(model="gpt-3.5-turbo-0613", messages=[system_message, user_message])
-    print(chatgpt_response)
+    return chatgpt_response
 
-def run(query):
-    #user_query = "how do i scale cpu?"
+def ask(query):
     user_query = query
     embedding = create_embedding(user_query)
     result = query_vector_db(embedding)
@@ -168,7 +158,12 @@ def run(query):
         print(source)
 
     knowledge_base = "\n".join(result['list_of_knowledge_base'])
-    ask_chatgpt(knowledge_base, user_query)
+    response = ask_chatgpt(knowledge_base, user_query)
+
+    return {
+        'sources': result['list_of_sources'],
+        'response': response
+    }
 
 
 def get_html_body_content(url):
@@ -221,3 +216,20 @@ def print_vector_count_milvus():
 #run('how do i add turbo streams')
 #print_vector_count_milvus()
 
+
+app = FastAPI()
+
+class Msg(BaseModel):
+    msg: str
+
+
+@app.get("/")
+async def root():
+    return {"message": "Hello World. Welcome to FastAPI!"}
+    result = ask("how do i add turbo streams")
+    return result
+
+@app.post("/search")
+async def search(inp: Msg):
+    response = ask(inp.msg)
+    return response
