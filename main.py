@@ -7,11 +7,29 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from timeit import default_timer as timer
 import requests
 from bs4 import BeautifulSoup
+import math
+
+from pymilvus import (
+    MilvusClient,
+    connections,
+    utility,
+    FieldSchema,
+    CollectionSchema,
+    DataType,
+    Collection,
+)
 
 
 load_dotenv()
 
-MODEL_CHUNK_SIZE = 512
+milvus_client = MilvusClient(
+    uri=os.getenv("MILVUS_ENDPOINT"), 
+    token=os.getenv("MILVUS_API_KEY")
+)
+
+
+# ada has max input size of 8191, and gpt-3.5 turbo new has 16k context window. we're gonna set chunk size to 8k
+MODEL_CHUNK_SIZE = 8192
 
 pinecone.init(api_key=os.getenv("PINECONE_API_KEY"), environment=os.getenv("PINECONE_ENV"))
 
@@ -19,35 +37,52 @@ index = pinecone.Index("fly-io-docs")
 
 # https://huggingface.co/spaces/mteb/leaderboard
 # https://huggingface.co/embaas/sentence-transformers-e5-large-v2
-model = SentenceTransformer('embaas/sentence-transformers-e5-large-v2')
+sentence_transformer_model = SentenceTransformer('embaas/sentence-transformers-e5-large-v2')
 
 def add_html_to_vectordb(content, path):
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size = MODEL_CHUNK_SIZE,
-        chunk_overlap  = 20
+        chunk_overlap  = math.floor(MODEL_CHUNK_SIZE/10)
     )
 
     docs = text_splitter.create_documents([content])
 
 
     for doc in docs:
-        insert_vector(doc.page_content, path)
+        embedding = create_embedding(doc.page_content)
+        insert_embedding(embedding, path)
 
-def rebuild_vector_for_path(path):
-    print("eh")
-
-def insert_vector(text, path):
+def create_embedding(text):
     start = timer()
-    embedding = model.encode(text)
+    # embedding = sentence_transformer_model.encode(text)
+    # embedding = sentence_transformer_model.encode(text)
+    embedding_model = 'text-embedding-ada-002'
+    embedding = openai.Embedding.create(input = [text], model=embedding_model)['data'][0]['embedding']
+
     end = timer()
     print(f'encode took {end - start} seconds')
+    return embedding
 
+def insert_embedding_to_milvus(embedding, text, path):
+    row = {
+        'data': embedding,
+        'text': text,
+        'path': path
+    }
+
+    milvus_client.insert("flyio_ada", data=[row])
+
+def insert_embedding(embedding, text, path):
+    insert_embedding_to_milvus(embedding, text, path)
+
+def insert_embeeding_to_pinecone(embedding, text, path):
     last_id  = index.describe_index_stats()['total_vector_count']
 
     upserted_data = []
     vector = (str(last_id + 1), embedding.tolist(), { 'content': text, 'path': path })
     upserted_data.append(vector)
 
+    start = timer()
     index.upsert(vectors=upserted_data)
     end = timer()
 
@@ -130,8 +165,8 @@ def get_html_sitemap(url):
 
 def index_website():
     links = get_html_sitemap("https://fly.io/sitemap.xml")
-    for link in links:
+    for link in links[:5]:
         content = get_html_body_content(link)
         add_html_to_vectordb(content, link)
 
-run()
+index_website()
