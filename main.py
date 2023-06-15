@@ -63,8 +63,6 @@ def add_html_to_vectordb(content, path):
 
 def create_embedding(text):
     start = timer()
-    # embedding = sentence_transformer_model.encode(text)
-    # embedding = sentence_transformer_model.encode(text)
     embedding_model = 'text-embedding-ada-002'
     embedding = openai.Embedding.create(input = [text], model=embedding_model)['data'][0]['embedding']
 
@@ -106,7 +104,7 @@ def list_vectors():
     print(results)
 
 def query_milvus(embedding):
-    result_count = 1
+    result_count = 3
 
     result = milvus_client.search(
         collection_name=milvus_collection_name,
@@ -149,8 +147,8 @@ def ask_chatgpt(knowledge_base, user_query):
     chatgpt_response = openai.ChatCompletion.create(model="gpt-3.5-turbo-0613", messages=[system_message, user_message])
     return chatgpt_response.choices[0].message.content
 
-def ask(query):
-    user_query = query
+def ask(user_query):
+    print("=== ask ===")
     embedding = create_embedding(user_query)
     result = query_vector_db(embedding)
 
@@ -239,6 +237,4 @@ async def root():
 @app.post("/search")
 async def search(inp: Msg):
     result = ask(inp.msg)
-    print("search result")
-    print(result)
     return result
