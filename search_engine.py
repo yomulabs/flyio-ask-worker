@@ -1,4 +1,5 @@
 from common_helper import create_embedding
+import openai
 
 class SearchEngine:
   def __init__(self, milvus_client, milvus_collection_name):
@@ -23,7 +24,7 @@ class SearchEngine:
       }
 
   def query_vector_db(self, embedding):
-      return query_milvus(embedding)
+      return self.query_milvus(embedding)
 
   def ask_chatgpt(self, knowledge_base, user_query):
       system_content = """You are an AI coding assistant designed to help users with their programming needs based on the Knowledge Base provided.
@@ -47,14 +48,14 @@ class SearchEngine:
 
   def search(self, user_query):
       embedding = create_embedding(user_query)
-      result = query_vector_db(embedding)
+      result = self.query_vector_db(embedding)
 
       print("sources")
       for source in result['list_of_sources']:
           print(source)
 
       knowledge_base = "\n".join(result['list_of_knowledge_base'])
-      response = ask_chatgpt(knowledge_base, user_query)
+      response = self.ask_chatgpt(knowledge_base, user_query)
 
       return {
           'sources': result['list_of_sources'],

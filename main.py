@@ -1,14 +1,11 @@
-
 from dotenv import load_dotenv
-from typing import Optional
 
 import os
-import openai
-from timeit import default_timer as timer
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
 from search_engine import SearchEngine
 from indexer import Indexer
 
@@ -26,7 +23,6 @@ milvus_collection_name = 'flyio_ada'
 
 indexer = Indexer(milvus_client, milvus_collection_name)
 searchEngine = SearchEngine(milvus_client, milvus_collection_name)
-
 
 
 ### API for indexing & AI search
