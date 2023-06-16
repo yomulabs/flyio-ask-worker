@@ -24,9 +24,8 @@ class Indexer:
 
       locations = soup.find_all("loc")
       for location in locations:
-          url = location.get_text()
-          if "fly.io/docs" not in url:
-              links.append(url)
+        url = location.get_text()
+        links.append(url)
 
       return links
 
@@ -43,7 +42,7 @@ class Indexer:
 
   def index_website(self, website_url):
       links = self.get_html_sitemap(website_url)
-      for link in links[7:]:
+      for link in links:
           print(link)
           try:
               content = self.get_html_body_content(link)

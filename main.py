@@ -47,3 +47,8 @@ async def root():
 async def search(inp: Msg):
     result = searchEngine.search(inp.msg)
     return result
+
+@app.post("/create_index")
+async def create_index(inp: Msg):
+    result = indexer.index_website(inp.msg)
+    return { "message": "Indexing complete" }
