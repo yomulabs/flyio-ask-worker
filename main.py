@@ -2,7 +2,6 @@
 from dotenv import load_dotenv
 from typing import Optional
 
-import pinecone
 import os
 from sentence_transformers import SentenceTransformer
 import openai
@@ -37,12 +36,7 @@ milvus_client = MilvusClient(
 
 milvus_collection_name = 'flyio_ada'
 
-# ada has max input size of 8191, and gpt-3.5 turbo new has 16k context window. we're gonna set chunk size to 8k
 MODEL_CHUNK_SIZE = 8192
-
-pinecone.init(api_key=os.getenv("PINECONE_API_KEY"), environment=os.getenv("PINECONE_ENV"))
-
-index = pinecone.Index("fly-io-docs")
 
 # https://huggingface.co/spaces/mteb/leaderboard
 # https://huggingface.co/embaas/sentence-transformers-e5-large-v2
@@ -86,23 +80,6 @@ def insert_embedding_to_milvus(embedding, text, path):
 def insert_embedding(embedding, text, path):
     insert_embedding_to_milvus(embedding, text, path)
 
-def insert_embeeding_to_pinecone(embedding, text, path):
-    last_id  = index.describe_index_stats()['total_vector_count']
-
-    upserted_data = []
-    vector = (str(last_id + 1), embedding.tolist(), { 'content': text, 'path': path })
-    upserted_data.append(vector)
-
-    start = timer()
-    index.upsert(vectors=upserted_data)
-    end = timer()
-
-    print(f'insert_vector {len(text)} took {end - start} seconds')
-
-def list_vectors():
-    results = index.fetch(ids=[])
-    print(results)
-
 def query_milvus(embedding):
     result_count = 3
 
@@ -122,10 +99,6 @@ def query_milvus(embedding):
 
 def query_vector_db(embedding):
     return query_milvus(embedding)
-
-def query_pinecone(embedding):
-    result = index.query(embedding, top_k=3, includeMetadata=True)
-    return result
 
 def ask_chatgpt(knowledge_base, user_query):
     system_content = """You are an AI coding assistant designed to help users with their programming needs based on the Knowledge Base provided.
@@ -210,10 +183,6 @@ def print_vector_count_milvus():
 
     result = milvus_client.query(collection_name=milvus_collection_name, filter='id > 3', output_fields=["id", "path"], limit=200)
     print(len(result))
-
-#index_website()
-#run('how do i add turbo streams')
-#print_vector_count_milvus()
 
 
 app = FastAPI()
