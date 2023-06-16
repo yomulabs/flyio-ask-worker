@@ -3,28 +3,16 @@ from dotenv import load_dotenv
 from typing import Optional
 
 import os
-from sentence_transformers import SentenceTransformer
 import openai
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from timeit import default_timer as timer
-import requests
-from bs4 import BeautifulSoup
-import math
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from search_engine import SearchEngine
+from indexer import Indexer
 
-
-from pymilvus import (
-    MilvusClient,
-    connections,
-    utility,
-    FieldSchema,
-    CollectionSchema,
-    DataType,
-    Collection,
-)
+from pymilvus import MilvusClient
 
 
 load_dotenv()
@@ -36,154 +24,12 @@ milvus_client = MilvusClient(
 
 milvus_collection_name = 'flyio_ada'
 
-MODEL_CHUNK_SIZE = 8192
-
-# https://huggingface.co/spaces/mteb/leaderboard
-# https://huggingface.co/embaas/sentence-transformers-e5-large-v2
-sentence_transformer_model = SentenceTransformer('embaas/sentence-transformers-e5-large-v2')
-
-def add_html_to_vectordb(content, path):
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size = MODEL_CHUNK_SIZE,
-        chunk_overlap  = math.floor(MODEL_CHUNK_SIZE/10)
-    )
-
-    docs = text_splitter.create_documents([content])
+indexer = Indexer(milvus_client, milvus_collection_name)
+searchEngine = SearchEngine(milvus_client, milvus_collection_name)
 
 
-    for doc in docs:
-        embedding = create_embedding(doc.page_content)
-        insert_embedding(embedding, doc.page_content, path)
 
-def create_embedding(text):
-    start = timer()
-    embedding_model = 'text-embedding-ada-002'
-    embedding = openai.Embedding.create(input = [text], model=embedding_model)['data'][0]['embedding']
-
-    end = timer()
-    print(f'encode took {end - start} seconds')
-    return embedding
-
-def insert_embedding_to_milvus(embedding, text, path):
-    row = {
-        'vector': embedding,
-        'text': text,
-        'path': path
-    }
-
-    start = timer()
-    milvus_client.insert("flyio_ada", data=[row])
-    end = timer()
-
-    print(f'insert_vector {len(text)} took {end - start} seconds')
-
-def insert_embedding(embedding, text, path):
-    insert_embedding_to_milvus(embedding, text, path)
-
-def query_milvus(embedding):
-    result_count = 3
-
-    result = milvus_client.search(
-        collection_name=milvus_collection_name,
-        data=[embedding],
-        limit=result_count,
-        output_fields=["path", "text"])
-
-    list_of_knowledge_base = list(map(lambda match: match['entity']['text'], result[0]))
-    list_of_sources = list(map(lambda match: match['entity']['path'], result[0]))
-
-    return {
-        'list_of_knowledge_base': list_of_knowledge_base,
-        'list_of_sources': list_of_sources
-    }
-
-def query_vector_db(embedding):
-    return query_milvus(embedding)
-
-def ask_chatgpt(knowledge_base, user_query):
-    system_content = """You are an AI coding assistant designed to help users with their programming needs based on the Knowledge Base provided.
-    If you dont know the answer, say that you dont know the answer. You will only answer questions related to fly.io, any other questions, you should say that its out of your responsibilities.
-    Only answer questions using data from knowledge base and nothing else.
-    """
-
-    user_content = f"""
-        Knowledge Base:
-        ---
-        {knowledge_base}
-        ---
-        User Query: {user_query}
-        Answer:
-    """
-    system_message = {"role": "system", "content": system_content}
-    user_message = {"role": "user", "content": user_content}
-    
-    chatgpt_response = openai.ChatCompletion.create(model="gpt-3.5-turbo-0613", messages=[system_message, user_message])
-    return chatgpt_response.choices[0].message.content
-
-def ask(user_query):
-    print("=== ask ===")
-    embedding = create_embedding(user_query)
-    result = query_vector_db(embedding)
-
-    print("sources")
-    for source in result['list_of_sources']:
-        print(source)
-
-    knowledge_base = "\n".join(result['list_of_knowledge_base'])
-    response = ask_chatgpt(knowledge_base, user_query)
-
-    return {
-        'sources': result['list_of_sources'],
-        'response': response
-    }
-
-
-def get_html_body_content(url):
-    response = requests.get(url)
-
-    # Parse the HTML content
-    soup = BeautifulSoup(response.content, "html.parser")
-
-    # Find the body element and extract its inner text
-    body = soup.body
-    inner_text = body.get_text()
-    return inner_text
-
-def get_html_sitemap(url):
-    response = requests.get(url)
-
-    # Parse the HTML content
-    soup = BeautifulSoup(response.content, "lxml")
-
-    # Find the body element and extract its inner text
-    links = []
-
-    locations = soup.find_all("loc")
-    for location in locations:
-        url = location.get_text()
-        if "fly.io/docs" not in url:
-            links.append(url)
-
-    return links
-
-
-def index_website():
-    links = get_html_sitemap("https://fly.io/sitemap.xml")
-    for link in links[7:]:
-        print(link)
-        try:
-            content = get_html_body_content(link)
-            add_html_to_vectordb(content, link)
-        except:
-            print("unable to process: " + link)
-
-def print_vector_count_milvus():
-    stats = milvus_client.describe_collection(collection_name=milvus_collection_name)
-    print(stats)
-
-    result = milvus_client.query(collection_name=milvus_collection_name, filter='id > 3', output_fields=["id", "path"], limit=200)
-    print(len(result))
-
+### API for indexing & AI search
 
 app = FastAPI()
 
@@ -194,10 +40,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 class Msg(BaseModel):
     msg: str
-
 
 @app.get("/")
 async def root():
@@ -205,5 +49,5 @@ async def root():
 
 @app.post("/search")
 async def search(inp: Msg):
-    result = ask(inp.msg)
+    result = searchEngine.search(inp.msg)
     return result
