@@ -19,7 +19,8 @@ milvus_client = MilvusClient(
     token=os.getenv("MILVUS_API_KEY")
 )
 
-milvus_collection_name = 'flyio_ada'
+#milvus_collection_name = 'flyio_ada'
+milvus_collection_name = 'test'
 
 indexer = Indexer(milvus_client, milvus_collection_name)
 searchEngine = SearchEngine(milvus_client, milvus_collection_name)
@@ -41,7 +42,7 @@ class Msg(BaseModel):
 
 @app.get("/")
 async def root():
-    return {"message": "Hello World. Welcome to FastAPI!"}
+    return {"message": "/search, /create_index"}
 
 @app.post("/search")
 async def search(inp: Msg):
